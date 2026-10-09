@@ -49,15 +49,17 @@ Twemoji からカラー絵文字フォントを作るスクリプト
 キャッシュ:
     作業フォルダ(--work)に途中結果を残し、2 回目以降は変わった部分だけ作り直す。
       work/twemoji/                      … Twemoji の clone
-      work/emoji-variation-sequences.txt … 異体字シーケンス一覧
+      work/unicode-<バージョン>/          … Unicode のデータ(UNICODE_VERSION のもの)
+        emoji-variation-sequences.txt    … 異体字シーケンス一覧
+        EastAsianWidth.txt               … 文字の幅の分類(--ambiguous のときだけ取得)
       work/stage/<種類>/                 … nanoemoji に渡す SVG
       work/build/<種類>/                 … nanoemoji(ninja)の途中結果
       work/cache/                        … nanoemoji の出力(オプションと SVG が同じなら再利用)
     <種類> はベクター形式と OT-SVG 形式なら vector、ビットマップ形式なら余白の倍率ごとに分かれる。
     ベクター形式と OT-SVG 形式どうし、sbix と cbdt どうしは途中結果を共有するので、形式を変えても速い。
     --clean は途中結果(stage/、build/、cache/)とダウンロード済みデータ
-    (twemoji/、emoji-variation-sequences.txt)を削除して終了する(ビルドしない)。
-    --refresh は途中結果を削除し、Twemoji と異体字シーケンス一覧を取得し直してからビルドする。
+    (twemoji/、unicode-<バージョン>/)を削除して終了する(ビルドしない)。
+    --refresh は途中結果を削除し、Twemoji と Unicode のデータを取得し直してからビルドする。
 
 処理の流れ:
     1. Twemoji の SVG を用意する                       … fetch_svgs()
@@ -72,6 +74,7 @@ Twemoji からカラー絵文字フォントを作るスクリプト
          - FE0F の有無にかかわらず合字が働くようにする … add_ligature_variants()
          - (--digit-keycaps)単独の数字・#・* をキーキャップにする … map_digit_keycaps()
          - 送り幅・縦メトリクスを指定値にそろえる
+         - (--ambiguous)text style の文字を半角幅にする   … make_half_width()
          - 等幅フォントであることを書き込む            … set_monospace()
          - CFF 内部の送り幅を hmtx と一致させる        … fix_cff_widths()
          - ビットマップの位置と送り幅を直す            … fix_bitmap_metrics()
@@ -98,11 +101,18 @@ from fontTools.ttLib import TTFont
 # 現在メンテナンスされている Twemoji のフォーク(本家 twitter/twemoji は更新停止)
 TWEMOJI_REPO = "https://github.com/jdecked/twemoji"
 
-# Unicode が公開している「絵文字の異体字シーケンス一覧」。
+# 使う Unicode のデータのバージョン。下の 2 つのファイルはどちらもこのバージョンのものを使う。
+# Twemoji が新しい Unicode に対応したら、ここを書き換えるだけでよい
+# (保存先のフォルダ名にもバージョンが入るので、書き換えると自動で取得し直す)
+UNICODE_VERSION = "18.0.0"
+# unicode.org に直接つながらない環境もあるので GitHub 上のミラー(unicodetools)を使う
+UCD_URL = ("https://raw.githubusercontent.com/unicode-org/unicodetools/main/"
+           f"unicodetools/data/ucd/{UNICODE_VERSION}/")
+# 「絵文字の異体字シーケンス一覧」。
 # 「U+2764 + U+FE0F(VS16)なら絵文字表示」のような組み合わせが列挙されている。
-# unicode.org に直接つながらない環境もあるので GitHub 上のミラーを使う。
-EVS_URL = ("https://raw.githubusercontent.com/unicode-org/unicodetools/main/"
-           "unicodetools/data/ucd/17.0.0/emoji/emoji-variation-sequences.txt")
+EVS_URL = UCD_URL + "emoji/emoji-variation-sequences.txt"
+# 文字ごとの East_Asian_Width(全角・半角などの幅の分類)の一覧。--ambiguous で使う
+EAW_URL = UCD_URL + "EastAsianWidth.txt"
 
 # 画面上で幅を持ってはいけない文字(送り幅 0 のままにしておくもの)
 #   U+200D        ZWJ(ゼロ幅接合子。👨‍👩‍👧 のように絵文字をつなぐ)
@@ -122,6 +132,9 @@ LICENSE_DESCRIPTION = ("Graphics licensed under CC-BY 4.0 "
                        "Modified from the original Twemoji SVGs (resized, re-centered, converted to font).")  # [13] ライセンスの説明
 LICENSE_URL = "https://creativecommons.org/licenses/by/4.0/"  # [14] ライセンスの URL
 ZERO_WIDTH = {0x200D, 0xFE0E, 0xFE0F} | set(range(0xE0020, 0xE0080))
+# --ambiguous で半角幅にする East_Asian_Width の値
+# (H = Halfwidth、Na = Narrow、N = Neutral、A = Ambiguous。W / F は全角のまま)
+AMBIGUOUS_EAW = {"H", "Na", "N", "A"}
 
 # このスクリプトで扱える --format の値
 #   ベクター形式: アウトライン(CFF / TrueType / CFF2)+ COLR(色を付ける表)
@@ -166,12 +179,13 @@ Examples:
   %(prog)s --format picosvg --family "Twemoji SVG"
   %(prog)s --format cbdt --family "Twemoji CBDT" --output out/emoji.ttf
   %(prog)s --digit-keycaps   (bare 0-9 # * are drawn as keycaps)
+  %(prog)s --ambiguous      (text-style emoji at half width, for terminals)
 
 Downloads, intermediate files and nanoemoji results are cached in --work;
 --clean deletes the build cache (stage/, build/, cache/) and the downloaded
-data (twemoji/, emoji-variation-sequences.txt) in --work, then exits;
---refresh deletes the build cache, re-downloads Twemoji and the variation
-sequence list, then builds.
+data (twemoji/, unicode-<version>/) in --work, then exits;
+--refresh deletes the build cache, re-downloads Twemoji and the Unicode data
+(emoji-variation-sequences.txt, EastAsianWidth.txt), then builds.
 
 Requirements: pip install nanoemoji fonttools cffsubr ; git
 Graphics: Twemoji (https://github.com/jdecked/twemoji), CC-BY 4.0.
@@ -202,7 +216,7 @@ def parse_args():
     # 作業フォルダの途中結果(キャッシュ)とダウンロード済みデータを削除して終了する(ビルドはしない)
     p.add_argument("--clean", action="store_true",
                    help="delete the build cache (stage/, build/, cache/) and the downloaded data "
-                        "(twemoji/, emoji-variation-sequences.txt) in --work, then exit without building")
+                        "(twemoji/, unicode-<version>/) in --work, then exit without building")
     # ビットマップの画像サイズ(ピクセル)。ascender〜descender の高さがこのピクセル数になる。
     # 大きいほど拡大時にきれいだが、ファイルが大きくなる
     p.add_argument("--bitmap-size", type=int, default=128,
@@ -214,10 +228,15 @@ def parse_args():
     p.add_argument("--evs-file", type=Path,
                    help="local emoji-variation-sequences.txt "
                         "(default: cached copy in --work, downloaded if missing)")
-    # 途中結果を削除し、保存済みでも Twemoji と異体字シーケンス一覧を取得し直してからビルドする
+    # East_Asian_Width の一覧(EastAsianWidth.txt)のファイル。--ambiguous のときだけ使う。
+    # 省略時は作業フォルダの保存済みデータ、無ければダウンロード
+    p.add_argument("--eaw-file", type=Path,
+                   help="local EastAsianWidth.txt, used by --ambiguous "
+                        "(default: cached copy in --work, downloaded if missing)")
+    # 途中結果を削除し、保存済みでも Twemoji と Unicode のデータを取得し直してからビルドする
     p.add_argument("--refresh", action="store_true",
-                   help="delete the build cache, re-download Twemoji and the variation sequence list, "
-                        "then build (--svg-dir / --evs-file are never downloaded)")
+                   help="delete the build cache, re-download Twemoji and the Unicode data, "
+                        "then build (--svg-dir / --evs-file / --eaw-file are never downloaded)")
     # VS15(U+FE0E)付きもこのフォントで受け持つ(= 文字表示の指定でもカラーになる)
     p.add_argument("--vs15", action="store_true",
                    help="also claim text-style sequences (U+FE0E) so they stay in this font (color)")
@@ -229,6 +248,15 @@ def parse_args():
     p.add_argument("--digit-keycaps", action="store_true",
                    help="show bare 0-9, # and * (12 characters) with their keycap glyph "
                         "(default: empty zero-width glyphs used only as keycap parts)")
+    # ターミナル向け: EAW が H / Na / N / A の文字の text style(と U+0020)を半角幅
+    # (--width の半分)にする。emoji style(FE0F 付き)は全角のまま
+    p.add_argument("--ambiguous", action="store_true",
+                   help="for terminals: make the text style of East_Asian_Width H/Na/N/A characters "
+                        "(and U+0020) half width (--width / 2); emoji style (FE0F) stays full width")
+    # --ambiguous の半角グリフの横の倍率。グリフの幅 = upem * --scale * この値(高さは変えない)
+    p.add_argument("--scale-ambiguous", type=float, default=0.55,
+                   help="with --ambiguous: horizontal glyph scale of the half-width glyphs "
+                        "(glyph width = upem * --scale * this, height unchanged; default 0.55)")
     # フォントのバージョン。省略時は Twemoji の package.json の version
     p.add_argument("--font-version",
                    help="font version, e.g. 17.0.3 (default: version in Twemoji's package.json)")
@@ -726,10 +754,11 @@ def fix_bitmap_metrics(f: TTFont, a):
     で換算する(ppem = そのビットマップが等倍になる文字サイズ)。
     """
     upem = f["head"].unitsPerEm
+    hmtx = f["hmtx"]               # 送り幅はグリフごとに hmtx から取る(--ambiguous の半角グリフは半分)
     if "sbix" in f:
         for strike in f["sbix"].strikes.values():
-            adv_px = a.width * strike.ppem / upem
-            for bm in strike.glyphs.values():
+            for g, bm in strike.glyphs.items():
+                adv_px = hmtx[g][0] * strike.ppem / upem
                 if bm.imageData and bm.graphicType == "png ":
                     w, _ = _png_size(bm.imageData)
                     # originOffsetX: 画像の左端の位置(ピクセル)。sbix には送り幅の項目は無く、hmtx を使う
@@ -737,8 +766,8 @@ def fix_bitmap_metrics(f: TTFont, a):
     if "CBDT" in f:
         for strike, sd in zip(f["CBLC"].strikes, f["CBDT"].strikeData):
             ppem = strike.bitmapSizeTable.ppemX
-            adv_px = round(a.width * ppem / upem)
-            for bm in sd.values():
+            for g, bm in sd.items():
+                adv_px = round(hmtx[g][0] * ppem / upem)
                 met = bm.metrics          # 画像ごとの寸法(すべてピクセル単位)
                 met.BearingX = round((adv_px - met.width) / 2)   # 画像の左端の位置
                 met.Advance = adv_px                             # 送り幅
@@ -750,29 +779,49 @@ def fix_bitmap_metrics(f: TTFont, a):
 # 5-3. 異体字シーケンス表(cmap format 14)
 # ---------------------------------------------------------------------------
 
-def fetch_evs(a) -> Path:
-    """emoji-variation-sequences.txt の場所を返す。
+def fetch_ucd(a, local: Path | None, name: str, url: str) -> Path:
+    """Unicode のデータファイル(name)の場所を返す。
 
     優先順位:
-      1. --evs-file で指定したファイル(ダウンロードしない)
+      1. --evs-file / --eaw-file で指定したファイル(local。ダウンロードしない)
       2. 作業フォルダに保存済みのファイル(--refresh が無ければこれを使う)
       3. どちらも無い、または --refresh 指定時はダウンロードして作業フォルダに保存する
+    保存先は work/unicode-<UNICODE_VERSION>/。バージョンごとにフォルダを分けるので、
+    UNICODE_VERSION を書き換えると古いデータは使われず、新しく取得される。
     """
-    if a.evs_file:
-        return a.evs_file
-    cached = a.work / "emoji-variation-sequences.txt"
+    if local:
+        return local
+    cached = a.work / f"unicode-{UNICODE_VERSION}" / name
     if cached.is_file() and not a.refresh:
-        print(f"using cached variation sequences: {cached}")
+        print(f"using cached {name}: {cached}")
         return cached
     import urllib.request
-    print(f"downloading {EVS_URL}")
-    with urllib.request.urlopen(EVS_URL) as r:
+    print(f"downloading {url}")
+    with urllib.request.urlopen(url) as r:
         data = r.read()
+    cached.parent.mkdir(parents=True, exist_ok=True)
     # いったん別名で書いてから置き換える(途中で失敗しても壊れたファイルを残さない)
     tmp = cached.with_suffix(".tmp")
     tmp.write_bytes(data)
     tmp.replace(cached)
     return cached
+
+
+def read_ucd(a, local: Path | None, name: str, url: str) -> str:
+    """Unicode のデータファイルを読み、中身を返す。
+
+    ファイル冒頭のバージョン表記
+        emoji-variation-sequences.txt … 「# Version: 18.0.0」(古い版は「17.0」の形)
+        EastAsianWidth.txt            … 「# EastAsianWidth-18.0.0.txt」
+    が UNICODE_VERSION と違うときは警告する(手元のファイルを指定したときの取り違え防止)。
+    """
+    path = fetch_ucd(a, local, name, url)
+    text = path.read_text(encoding="utf-8")
+    m = re.search(r"^#\s*(?:Version:\s*|EastAsianWidth-)(\d+(?:\.\d+)*)", text, re.M)
+    version = ".".join((m.group(1).split(".") + ["0", "0"])[:3]) if m else None   # "17.0" -> "17.0.0"
+    if version != UNICODE_VERSION:
+        print(f"warning: {path} is Unicode {version or 'unknown'}, expected {UNICODE_VERSION}")
+    return text
 
 
 def load_variation_sequences(a) -> list[tuple[int, int]]:
@@ -784,7 +833,7 @@ def load_variation_sequences(a) -> list[tuple[int, int]]:
     """
     if getattr(a, "_evs", None) is not None:
         return a._evs
-    text = fetch_evs(a).read_text(encoding="utf-8")
+    text = read_ucd(a, a.evs_file, "emoji-variation-sequences.txt", EVS_URL)
     seqs = []
     for line in text.splitlines():
         line = line.split("#", 1)[0].strip()       # '#' 以降のコメントを捨てる
@@ -794,6 +843,31 @@ def load_variation_sequences(a) -> list[tuple[int, int]]:
         seqs.append((int(base, 16), int(vs, 16)))
     a._evs = seqs
     return seqs
+
+
+def load_east_asian_width(a) -> dict[int, str]:
+    """EastAsianWidth.txt を読み、文字コード -> East_Asian_Width の値 の辞書を返す。
+
+    ファイルの各行はこういう形式(1 文字か、「..」でつないだ範囲):
+        0020           ; Na # Zs         SPACE
+        2600..2604     ; N  # So     [5] BLACK SUN WITH RAYS..COMET
+    載っていない文字は N(UAX #11 の既定値)として扱う。
+    一度読んだ結果は a._eaw に覚えておく。
+    """
+    if getattr(a, "_eaw", None) is not None:
+        return a._eaw
+    text = read_ucd(a, a.eaw_file, "EastAsianWidth.txt", EAW_URL)
+    eaw = {}
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        cps, value = (x.strip() for x in line.split(";", 1))
+        first, _, last = cps.partition("..")
+        for cp in range(int(first, 16), int(last or first, 16) + 1):
+            eaw[cp] = value
+    a._eaw = eaw
+    return eaw
 
 
 def add_ligature_variants(f: TTFont, a):
@@ -999,6 +1073,297 @@ def set_version(f: TTFont, version: str):
 
 
 # ---------------------------------------------------------------------------
+# 5-5. 半角幅(--ambiguous)
+# ---------------------------------------------------------------------------
+
+def _narrow_png(data: bytes, sx: float, max_w: int) -> bytes:
+    """PNG 画像を横方向だけ sx 倍に縮める(高さはそのまま)。
+
+    縮めた画像の幅が max_w ピクセル(半角の送り幅)より広いときは、左右の
+    透明な列を同じ数ずつ削る。中心は変わらないので、fix_bitmap_metrics() で
+    中央にそろえたときも絵柄の位置はずれない。
+    """
+    import io
+    from PIL import Image
+    # "RGBa" = 透明度を掛け合わせた形式。この形で縮めると縁に変な色がにじまない
+    im = Image.open(io.BytesIO(data)).convert("RGBA").convert("RGBa")
+    w, h = im.size
+    im = im.resize((max(1, round(w * sx)), h), Image.LANCZOS).convert("RGBA")
+    w = im.width
+    box = im.getchannel("A").getbbox()          # 透明でない部分の範囲 (左, 上, 右, 下)
+    if box and w > max_w:
+        # 削るのは「はみ出す分の半分」まで、かつ左右とも透明な列の範囲内だけ
+        cut = min((w - max_w + 1) // 2, box[0], w - box[2])
+        im = im.crop((cut, 0, w - cut, h))
+    buf = io.BytesIO()
+    im.save(buf, "PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _svg_glyph_doc(root, by_id: dict, el, new_id: str, transform: str) -> str:
+    """グリフ 1 個だけの SVG 文書を作る。
+
+    el を <g id=new_id transform=...> で包み、el が参照している要素
+    (グラデーション、クリップパス、<use> の参照先など)だけを <defs> に入れる。
+    nanoemoji は何千ものグリフを 1 つの文書にまとめることがあるので、
+    文書を丸ごとコピーするとフォントが巨大になる。
+    by_id は元の文書の「id -> 要素」の対応表。
+    """
+    import copy
+    from lxml import etree
+    ns = etree.QName(root).namespace
+    q = (lambda tag: f"{{{ns}}}{tag}") if ns else (lambda tag: tag)   # 名前空間付きのタグ名
+    needed, seen, todo = [], {el.get("id")}, [el]
+    while todo:
+        # url(#id) と href="#id" の参照をたどる(参照先がさらに参照している要素も含める)
+        for x in todo.pop().iter():
+            for k, v in x.attrib.items():
+                refs = re.findall(r"url\(\s*['\"]?#([^)'\"\s]+)", v)
+                if k.endswith("href") and v.startswith("#"):
+                    refs.append(v[1:])
+                for i in refs:
+                    if i in by_id and i not in seen:
+                        seen.add(i)
+                        needed.append(by_id[i])
+                        todo.append(by_id[i])
+    doc = etree.Element(root.tag, attrib=dict(root.attrib), nsmap=root.nsmap)
+    for x in root:                                # <style> があればそのまま残す
+        if etree.QName(x).localname == "style":
+            doc.append(copy.deepcopy(x))
+    if needed:
+        defs = etree.SubElement(doc, q("defs"))   # <defs> の中身は参照されたときだけ描かれる
+        for x in needed:
+            defs.append(copy.deepcopy(x))
+    wrap = etree.SubElement(doc, q("g"), id=new_id, transform=transform)
+    wrap.append(copy.deepcopy(el))
+    return etree.tostring(doc, encoding="unicode")
+
+
+def make_half_width(f: TTFont, a):
+    """--ambiguous: Halfwidth / Narrow / Neutral / Ambiguous の文字の text style を
+    半角幅で表示する(ターミナルエミュレータ向け)。
+
+    ターミナルは East_Asian_Width(EAW、文字の幅の分類)が W / F の文字を 2 マス、
+    それ以外を 1 マスとして並べることが多い。⚠ のような EAW = N / A の文字に
+    全角幅の絵文字を描くと、隣のマスにはみ出してしまう。
+
+    異体字シーケンスを持ち、EAW が H、Na、N、A の文字 C それぞれについて:
+      ・グリフ G を横方向に --scale-ambiguous 倍して、幅 width/2 の中央に置いた
+        コピー G.half を作り、C(と「C FE0E」)を G.half に割り当てる
+      ・「C FE0F」(emoji style)は cmap14 の Non-Default UVS で G のまま(全角)にする
+      ・ZWJ シーケンスやキーキャップの合字に G.half を使う並びも追加し、
+        今までどおり 1 つの全角の絵文字になるようにする
+    U+0020(フォント内で唯一の絵文字でない文字)も幅を width/2 にする。
+    EAW は UNICODE_VERSION の EastAsianWidth.txt から取る(load_east_asian_width())。
+    """
+    import copy
+    import itertools
+    import math
+    from fontTools.misc.roundTools import otRound
+    from fontTools.pens.transformPen import TransformPen
+    cmap = f.getBestCmap()
+    hmtx = f["hmtx"]
+    upem = f["head"].unitsPerEm
+    half = a.width // 2
+    sx = a.scale_ambiguous
+    # 全角グリフの中心は x = width/2。横に sx 倍して、中心を半角幅の中心 width/4 に移す:
+    #   x' = sx * (x - width/2) + width/4 = sx * x + dx
+    dx = half / 2 - sx * a.width / 2
+    tr = (sx, 0, 0, 1, dx, 0)                 # (xx, xy, yx, yy, dx, dy) の変換行列
+    # 対象 = 異体字シーケンス一覧の基底文字のうち、フォントにあって幅が 0 でなく、
+    # EAW が H / Na / N / A のもの(--digit-keycaps が無いときの #*0-9 は幅 0 なので対象外)
+    bases = sorted({b for b, vs in load_variation_sequences(a) if vs == 0xFE0F})
+    eaw = load_east_asian_width(a)
+    targets = {cp: cmap[cp] for cp in bases
+               if cp in cmap and hmtx[cmap[cp]][0] > 0
+               and eaw.get(cp, "N") in AMBIGUOUS_EAW}
+    order = f.getGlyphOrder()
+    gid = {g: i for i, g in enumerate(order)}
+    halves = {g: g + ".half" for g in dict.fromkeys(targets.values())}   # G -> G.half
+    copies = dict(halves)                 # 形をコピーするグリフ: 元のグリフ -> 新しいグリフ
+    colr = f["COLR"] if "COLR" in f else None
+    if colr is not None and colr.version == 0:
+        # COLRv0 は重ねる部品(レイヤー)ごとにグリフがあるので、部品も縮めたコピーを作る
+        from fontTools.ttLib.tables.C_O_L_R_ import LayerRecord
+        for g, h in halves.items():
+            layers = []
+            for layer in colr.ColorLayers.get(g, []):
+                copies.setdefault(layer.name, layer.name + ".half")   # 共有部品は 1 回だけ
+                layers.append(LayerRecord(copies[layer.name], layer.colorID))
+            if layers:
+                colr.ColorLayers[h] = layers
+    assert not set(copies.values()) & set(order), "glyph name collision"
+    # 新しいグリフは末尾に追加する(既存のグリフ番号は変えない)
+    new_order = order + list(copies.values())
+    new_gid = {g: i for i, g in enumerate(new_order)}
+
+    # --- 輪郭(COLRv0 の部品と、各グリフ本体)を変換してコピー --------------
+    gs = f.getGlyphSet()
+    if "glyf" in f:
+        from fontTools.pens.ttGlyphPen import TTGlyphPen
+        glyf = f["glyf"]
+        for src, dst in copies.items():
+            # 元の輪郭を TransformPen 経由で描くと、変換後の輪郭ができる
+            pen = TTGlyphPen(gs)
+            gs[src].draw(TransformPen(pen, tr))
+            glyph = pen.glyph()
+            glyph.recalcBounds(glyf)
+            glyf[dst] = glyph
+            hmtx[dst] = (half, getattr(glyph, "xMin", 0))   # 空のグリフは xMin が無い
+    else:
+        # CFF / CFF2: 同じように描いて charstring(CFF の輪郭データ)を作り、追加する
+        from fontTools.pens.t2CharStringPen import T2CharStringPen
+        is_cff2 = "CFF2" in f
+        cff = f["CFF2" if is_cff2 else "CFF "].cff
+        td = cff.topDictIndex[0]
+        fd = getattr(td, "FDArray", None)
+        priv = fd[0].Private if fd else td.Private
+        cs = td.CharStrings
+        for src, dst in copies.items():
+            pen = T2CharStringPen(None, gs, CFF2=is_cff2)   # 幅は fix_cff_widths() で入れる
+            gs[src].draw(TransformPen(pen, tr))
+            c = pen.getCharString(private=priv, globalSubrs=cff.GlobalSubrs)
+            cs.charStrings[dst] = len(cs.charStringsIndex)
+            cs.charStringsIndex.append(c)
+            if getattr(td, "FDSelect", None) is not None:
+                td.FDSelect.append(0)
+            bounds = c.calcBounds(cs)
+            hmtx[dst] = (half, otRound(bounds[0]) if bounds else 0)
+        td.charset = list(new_order)
+
+    # --- 色の情報 -----------------------------------------------------------
+    if colr is not None and colr.version == 1:
+        # COLRv1 は描画命令(Paint)の木なので、G の木全体を PaintTransform で包むだけでよい
+        from fontTools.ttLib.tables import otTables as ot
+        t = colr.table
+        clips = t.ClipList.clips if t.ClipList else {}
+        paints = {r.BaseGlyph: r.Paint for r in t.BaseGlyphList.BaseGlyphPaintRecord}
+        for g, h in halves.items():
+            if g not in paints:
+                continue
+            rec = ot.BaseGlyphPaintRecord()
+            rec.BaseGlyph = h
+            # G の Paint の木をそのまま共有する(コピーしない)。PaintColrGlyph で G を
+            # 参照するほうが小さいが、描画エンジンによっては切り抜き範囲を誤る
+            rec.Paint = ot.Paint()
+            rec.Paint.Format = ot.PaintFormat.PaintTransform
+            rec.Paint.Paint = paints[g]
+            rec.Paint.Transform = ot.Affine2x3()
+            rec.Paint.Transform.xx, rec.Paint.Transform.yx = sx, 0
+            rec.Paint.Transform.xy, rec.Paint.Transform.yy = 0, 1
+            rec.Paint.Transform.dx, rec.Paint.Transform.dy = dx, 0
+            t.BaseGlyphList.BaseGlyphPaintRecord.append(rec)
+            if g in clips:
+                # 切り抜き範囲(ClipBox)も同じ変換で横に縮める
+                box = copy.deepcopy(clips[g])
+                box.xMin = math.floor(sx * box.xMin + dx)
+                box.xMax = math.ceil(sx * box.xMax + dx)
+                clips[h] = box
+        # BaseGlyphPaintRecord はグリフ番号順に並べる決まり
+        t.BaseGlyphList.BaseGlyphPaintRecord.sort(key=lambda r: new_gid[r.BaseGlyph])
+        t.BaseGlyphList.BaseGlyphCount = len(t.BaseGlyphList.BaseGlyphPaintRecord)
+    if "SVG " in f:
+        # OT-SVG: G の SVG 文書から id="glyph<番号>" の要素(と参照先)を取り出し、
+        # 変換付きの <g> で包んだ新しい文書を作る(_svg_glyph_doc())。
+        # SVG の座標は y が下向きだが、横方向だけの変換なので行列は同じでよい
+        from lxml import etree
+        from fontTools.ttLib.tables.S_V_G_ import SVGDocument
+        svg = f["SVG "]
+        doc_of = {i: d for d in svg.docList for i in range(d.startGlyphID, d.endGlyphID + 1)}
+        parsed = {}
+        for g, h in halves.items():
+            d = doc_of.get(gid[g])
+            if d is None:
+                continue
+            if id(d) not in parsed:          # 同じ文書は 1 回だけ解析する
+                root = etree.fromstring(d.data.encode("utf-8"))
+                parsed[id(d)] = (root, {e.get("id"): e for e in root.iter() if e.get("id")})
+            root, by_id = parsed[id(d)]
+            el = by_id.get(f"glyph{gid[g]}")
+            if el is None:
+                continue
+            data = _svg_glyph_doc(root, by_id, el, f"glyph{new_gid[h]}", f"matrix({sx:g} 0 0 1 {dx:g} 0)")
+            svg.docList.append(SVGDocument(data, new_gid[h], new_gid[h], d.compressed))
+    if "sbix" in f:
+        # ビットマップは変換行列が使えないので、PNG 画像そのものを横に縮める
+        # (位置は fix_bitmap_metrics() が hmtx の送り幅の中央にそろえる)
+        from fontTools.ttLib.tables.sbixGlyph import Glyph as SbixGlyph
+        for strike in f["sbix"].strikes.values():
+            for g, h in halves.items():
+                bm = strike.glyphs.get(g)
+                if bm is not None and bm.graphicType == "png ":
+                    png = _narrow_png(bm.imageData, sx, half * strike.ppem // upem)
+                    strike.glyphs[h] = SbixGlyph(
+                        glyphName=h, graphicType="png ", imageData=png,
+                        originOffsetX=bm.originOffsetX, originOffsetY=bm.originOffsetY)
+    if "CBDT" in f:
+        for strike, sd in zip(f["CBLC"].strikes, f["CBDT"].strikeData):
+            added = []
+            for g, h in halves.items():
+                bm = sd.get(g)
+                if bm is None:
+                    continue
+                nb = copy.copy(bm)
+                nb.metrics = copy.copy(bm.metrics)
+                nb.imageData = _narrow_png(bm.imageData, sx, half * strike.bitmapSizeTable.ppemX // upem)
+                nb.metrics.width = _png_size(nb.imageData)[0]
+                sd[h] = nb
+                added.append(h)
+            if added:
+                # CBLC(画像の索引)に、追加したグリフ用の索引サブテーブルを足す。
+                # 位置情報(locations)は保存時に計算し直される
+                ist = copy.copy(strike.indexSubTables[-1])
+                ist.names, ist.locations = added, []
+                strike.indexSubTables.append(ist)
+
+    # --- cmap: C と「C FE0E」→ G.half、「C FE0F」→ G(Non-Default UVS)-----------
+    for st in f["cmap"].tables:
+        if st.format == 14:
+            for vs, lst in st.uvsDict.items():
+                st.uvsDict[vs] = [
+                    (b, (targets[b] if vs == 0xFE0F else (halves[targets[b]] if g else None))
+                     if b in targets else g)
+                    for b, g in lst]
+        elif st.isUnicode():
+            for cp, g in targets.items():
+                if st.cmap.get(cp) == g:
+                    st.cmap[cp] = halves[g]
+
+    # --- 合字: 並びの中の G を G.half に替えた組み合わせをすべて追加する -----
+    # (HarfBuzz は「C FE0F」を G にして FE0F を取り除き、FE0F の無い C は G.half にするので、
+    #   ❤️‍🔥 = 2764 FE0F 200D 1F525 も 2764 200D 1F525 も 1 つの絵文字になるようにする)
+    added = 0
+    for lookup in f["GSUB"].table.LookupList.Lookup if "GSUB" in f else []:
+        if lookup.LookupType != 4:
+            continue
+        for st in lookup.SubTable:
+            existing = {(first, *lig.Component) for first, lst in st.ligatures.items() for lig in lst}
+            new = []
+            for first, lst in st.ligatures.items():
+                for lig in lst:
+                    choices = [(g, halves[g]) if g in halves else (g,) for g in (first, *lig.Component)]
+                    for var in itertools.product(*choices):
+                        if var not in existing:
+                            existing.add(var)
+                            new.append((var, lig.LigGlyph))
+            for var, glyph in new:
+                lig = type(st.ligatures[next(iter(st.ligatures))][0])()
+                lig.LigGlyph, lig.Component, lig.CompCount = glyph, list(var[1:]), len(var)
+                st.ligatures.setdefault(var[0], []).append(lig)
+                added += 1
+            for lst in st.ligatures.values():   # 長い並びから先に試す
+                lst.sort(key=lambda l: len(l.Component), reverse=True)
+
+    # U+0020(EAW = Na)も半角幅にする
+    space = cmap.get(0x20)
+    if space is not None:
+        hmtx[space] = (half, hmtx[space][1])
+    f.setGlyphOrder(new_order)
+    print(f"ambiguous: {len(targets)} text-style characters + U+0020 -> width {half}, "
+          f"glyph width x{sx:g}; ligature variants +{added}")
+
+
+# ---------------------------------------------------------------------------
 # 5. 後処理のまとめ
 # ---------------------------------------------------------------------------
 
@@ -1045,6 +1410,9 @@ def post_process(src: Path, dst: Path, a):
     # 送り幅に関係する集計値も更新する
     f["hhea"].advanceWidthMax = max(adv for adv, _ in hmtx.metrics.values())
     f["OS/2"].recalcAvgCharWidth(f)
+    if a.ambiguous:
+        make_half_width(f, a)      # text style の文字を半角幅にする(関数の説明を参照)
+        f["OS/2"].xAvgCharWidth = a.width // 2   # 平均の文字幅も半角幅にする
 
     # --- 縦メトリクス -------------------------------------------------------
     # 行の高さ・ベースライン位置の情報は 3 か所にあり、OS ごとに見る場所が違う:
@@ -1147,10 +1515,11 @@ def clean_build_cache(work: Path):
 def clean_downloads(work: Path):
     """作業フォルダにダウンロードしたデータを削除する。
 
-    削除するもの: twemoji/(Twemoji の clone)、emoji-variation-sequences.txt
-    --svg-dir / --evs-file で指定した手元のファイルは作業フォルダの外にあるので触らない。
+    削除するもの: twemoji/(Twemoji の clone)、unicode-<バージョン>/(Unicode のデータ)、
+    以前のバージョンのスクリプトが作業フォルダ直下に保存した emoji-variation-sequences.txt
+    --svg-dir / --evs-file / --eaw-file で指定した手元のファイルは作業フォルダの外にあるので触らない。
     """
-    for p in (work / "twemoji", work / "emoji-variation-sequences.txt"):
+    for p in [work / "twemoji", *sorted(work.glob("unicode-*")), work / "emoji-variation-sequences.txt"]:
         if p.is_dir():
             print(f"removing {p}")
             shutil.rmtree(p)
@@ -1167,6 +1536,8 @@ def main():
         clean_build_cache(a.work)
         clean_downloads(a.work)
         return
+    if a.scale_ambiguous <= 0:
+        sys.exit("--scale-ambiguous must be > 0")
     resolve_output(a)              # 出力ファイル名を決める
     if 0 < a.descender:            # 「309」のように正の値で指定されたら下向き(負)に直す
         a.descender = -a.descender
