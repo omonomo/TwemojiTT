@@ -11,7 +11,7 @@
 
 This is [Twemoji](https://github.com/jdecked/twemoji), adapted for CJK monospace fonts with adjusted sizes and other settings, then converted to TrueType.  
 Since em size = width and line gap = 0, the layout is less likely to break when specified as a fallback font.  
-CBDT, COLRv0, sbix, and OT-SVG are provided to ensure compatibility across various environments.
+CBDT, COLRv0, sbix, and OT-SVG formrts are provided to ensure compatibility across various environments.
 
 ## Variations
 
@@ -20,15 +20,22 @@ CBDT, COLRv0, sbix, and OT-SVG are provided to ensure compatibility across vario
 - A font where text-style #, *, and 0–9 are invisible.
 - The specification complies with Unicode standards.
 
+<img alt="TT" src="./images/TT.png" width="138">
+
 ### TwemojiTTKC-*.ttf
 
 - A font where text-style #, *, and 0–9 are displayed using the same glyphs as keycaps.
 - This specification is intended to feel more natural for users.
 
+<img alt="TTKC" src="./images/TTKC.png" width="138">
+
 ### TwemojiTTTM*-\*.ttf
 
 - A version compatible with terminal emulators.
 - The glyph width for characters in text styles other than Fullwidth and Wide is halved.
+
+<img alt="TTTM" src="./images/TTTM.png" width="138">  
+<img alt="TTTMKC" src="./images/TTTMKC.png" width="138">
 
 ## Download
 

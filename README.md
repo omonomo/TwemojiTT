@@ -11,7 +11,7 @@
 
 CJK 等幅フォント用にサイズなどを調整して TrueType に変換した [Twemoji](https://github.com/jdecked/twemoji) です。  
 em size = width で line gap = 0 のため、フォールバックフォントに指定した際にレイアウトが崩れにくいと思われます。  
-様々な環境に対応できるように CBDT、COLRv0、sbix、OT-SVG を用意しました。
+様々な環境に対応できるように CBDT、COLRv0、sbix、OT-SVG の各フォーマットを用意しました。
 
 ## バリエーション
 
@@ -20,15 +20,22 @@ em size = width で line gap = 0 のため、フォールバックフォント�
 - テキストスタイルの #、*、0 〜 9 が不可視のフォントです。
 - Unicode の規定に準拠した仕様です。
 
+<img alt="TT" src="./images/TT.png" width="138">
+
 ### TwemojiTTKC-*.ttf
 
 - テキストスタイルの #、*、0 〜 9 がキーキャップと同じグリフで表示されるフォントです。
 - ユーザーが扱う際に違和感が少ないと思われる仕様です。
 
+<img alt="TTKC" src="./images/TTKC.png" width="138">
+
 ### TwemojiTTTM*-\*.ttf
 
 - ターミナルエミュレータ対応版。
 - テキストスタイルの文字幅が Fullwidth、Wide 以外の文字のグリフ幅を半分にしています。
+
+<img alt="TTTM" src="./images/TTTM.png" width="138">  
+<img alt="TTTMKC" src="./images/TTTMKC.png" width="138">
 
 ## ダウンロード
 
