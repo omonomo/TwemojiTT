@@ -1,7 +1,7 @@
 # TwemojiTT (TrueType 版 Twemoji)
 
 Twemoji graphics (c) Twitter, Inc and other contributors ([/jdecked/twemoji](https://github.com/jdecked/twemoji)).  
-Font adaptation (c) 2026 omonomo ([/omonomo/Twemoji-ttf](https://github.com/omonomo/Twemoji-ttf)).
+Font adaptation (c) 2026 omonomo ([/omonomo/TwemojiTT](https://github.com/omonomo/TwemojiTT)).
 
 CJK 等幅フォント用にサイズなどを調整して TrueType に変換した Twemoji です。  
 em size = width で line gap = 0 のため、フォールバックフォントに指定した際にレイアウトが崩れにくいと思われます。  
@@ -26,7 +26,7 @@ em size = width で line gap = 0 のため、フォールバックフォント�
 
 ## ライセンス
 
-- フォントのライセンスは [CC-BY-4.0 Licensse](https://github.com/omonomo/Twemoji-ttf/blob/main/LICENSE-GRAPHICS.txt) です。
+- フォントのライセンスは [CC-BY-4.0 Licensse](https://github.com/omonomo/TwemojiTT/blob/main/LICENSE-GRAPHICS.txt) です。
 - 素材グラフィックの[ライセンス](https://github.com/jdecked/twemoji/blob/main/LICENSE-GRAPHICS)を継承しています。
 
 ## 謝辞

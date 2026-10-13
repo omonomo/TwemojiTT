@@ -1,7 +1,7 @@
 # TwemojiTT (TrueType version of Twemoji)
 
 Twemoji graphics (c) Twitter, Inc and other contributors ([/jdecked/twemoji](https://github.com/jdecked/twemoji)).  
-Font adaptation (c) 2026 omonomo ([/omonomo/Twemoji-ttf](https://github.com/omonomo/Twemoji-ttf)).
+Font adaptation (c) 2026 omonomo ([/omonomo/TwemojiTT](https://github.com/omonomo/TwemojiTT)).
 
 This is Twemoji, adapted for CJK monospace fonts with adjusted sizes and other settings, then converted to TrueType.  
 Since em size = width and line gap = 0, the layout is less likely to break when specified as a fallback font.  
@@ -26,7 +26,7 @@ CBDT, COLRv0, sbix, and OT-SVG are provided to ensure compatibility across vario
 
 ## License
 
-- The font is licensed under [CC-BY-4.0 License](https://github.com/omonomo/Twemoji-ttf/blob/main/LICENSE-GRAPHICS.txt).
+- The font is licensed under [CC-BY-4.0 License](https://github.com/omonomo/TwemojiTT/blob/main/LICENSE-GRAPHICS.txt).
 - It inherits the [license](https://github.com/jdecked/twemoji/blob/main/LICENSE-GRAPHICS) for the graphic assets.
 
 ## Acknowledgments
