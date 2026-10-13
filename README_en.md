@@ -39,7 +39,7 @@ CBDT, COLRv0, sbix, and OT-SVG formrts are provided to ensure compatibility acro
 
 ## Download
 
-Please download from [Releases](https://github.com/omonomo/Twemoji-ttf/releases).
+Please download from [Releases](https://github.com/omonomo/TwemojiTT/releases).
 
 You can also install it via [Homebrew](https://brew.sh/). Please refer to [this](https://github.com/omonomo/homebrew-tap) guide.
 
@@ -48,9 +48,9 @@ omonomo assumes no responsibility for any issues or damages resulting from the u
 
 ## License
 
-- The font license is [CC-BY-4.0 License](https://github.com/omonomo/Twemoji-ttf/blob/main/LICENSE-GRAPHICS.txt).
+- The font license is [CC-BY-4.0 License](https://github.com/omonomo/TwemojiTT/blob/main/LICENSE-GRAPHICS.txt).
 - It inherits the [license](https://github.com/jdecked/twemoji/blob/main/LICENSE-GRAPHICS) for the graphic assets.
-- The generation script is licensed under the [MIT License](https://github.com/omonomo/Twemoji-ttf/blob/main/LICENSE.txt).
+- The generation script is licensed under the [MIT License](https://github.com/omonomo/TwemojiTT/blob/main/LICENSE.txt).
 
 ## About the Generation Script
 

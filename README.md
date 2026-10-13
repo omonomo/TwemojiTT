@@ -39,7 +39,7 @@ em size = width で line gap = 0 のため、フォールバックフォント�
 
 ## ダウンロード
 
-[Releases](https://github.com/omonomo/Twemoji-ttf/releases) からお願いいたします。
+[Releases](https://github.com/omonomo/TwemojiTT/releases) からお願いいたします。
 
 [Homebrew](https://brew.sh/ja/) でもインストールできます。[こちら](https://github.com/omonomo/homebrew-tap)をご参照下さい。
 
@@ -48,9 +48,9 @@ em size = width で line gap = 0 のため、フォールバックフォント�
 
 ## ライセンス
 
-- フォントのライセンスは [CC-BY-4.0 Licensse](https://github.com/omonomo/Twemoji-ttf/blob/main/LICENSE-GRAPHICS.txt) です。
+- フォントのライセンスは [CC-BY-4.0 Licensse](https://github.com/omonomo/TwemojiTT/blob/main/LICENSE-GRAPHICS.txt) です。
 - 素材グラフィックの[ライセンス](https://github.com/jdecked/twemoji/blob/main/LICENSE-GRAPHICS)を継承しています。
-- 生成スクリプトのライセンスは [MIT License](https://github.com/omonomo/Twemoji-ttf/blob/main/LICENSE.txt) です。
+- 生成スクリプトのライセンスは [MIT License](https://github.com/omonomo/TwemojiTT/blob/main/LICENSE.txt) です。
 
 ## 生成スクリプトについて
 
