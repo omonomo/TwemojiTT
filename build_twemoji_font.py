@@ -126,7 +126,7 @@ COPYRIGHT = ("Twemoji graphics (c) Twitter, Inc and other contributors (jdecked/
              "Font adaptation (c) 2026 omonomo.")  # [0] 著作権表示
 MANUFACTURER = "omonomo"  # [8] 製作者
 DESIGNER = "The Iconfactory, Twitter, Inc and other contributors"  # [9] デザイナー名
-VENDOR_URL = "https://github.com/omonomo/Twemoji-ttf"  # [11] 製作者(ベンダー)の URL
+VENDOR_URL = "https://github.com/omonomo/TwemojiTT"  # [11] 製作者(ベンダー)の URL
 DESIGNER_URL = "https://github.com/jdecked/twemoji"  # [12] デザイナーの URL
 LICENSE_DESCRIPTION = ("Graphics licensed under CC-BY 4.0 "
                        "Modified from the original Twemoji SVGs (resized, re-centered, converted to font).")  # [13] ライセンスの説明
