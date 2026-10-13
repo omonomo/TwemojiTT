@@ -23,7 +23,7 @@ Twemoji からカラー絵文字フォントを作るスクリプト
 (COLRv0 / COLRv1 のベクター形式、sbix / CBDT のビットマップ形式、または OT-SVG 形式)
 
 必要なもの (requirement):
-    pip install nanoemoji fonttools cffsubr
+    pip install nanoemoji fonttools cffsubr typing_extensions
     git(Twemoji の SVG を取得するため)
 
 使い方の例 (usage):
