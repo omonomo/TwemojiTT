@@ -84,3 +84,7 @@ These are custom modified and composited fonts I created.
 ### Japanese monospaced fonts customized for development use
 
 - [Japanese Font Development Project](https://github.com/omonomo/JPMonoFonts)
+
+### Color emoji fonts sized for CJK monospace fonts
+
+- [NCemojiTT](https://github.com/omonomo/NCemojiTT): Noto Color Emoji

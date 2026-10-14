@@ -84,3 +84,7 @@ em size = width で line gap = 0 のため、フォールバックフォント�
 ### 開発用途向けにカスタマイズした日本語等幅フォント
 
 - [日本語フォント開発用途化計画](https://github.com/omonomo/JPMonoFonts)
+
+### CJK等幅フォント用にサイズ調整したカラー絵文字
+
+- [NCemojiTT](https://github.com/omonomo/NCemojiTT): Noto Color Emoji
