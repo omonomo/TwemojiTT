@@ -32,7 +32,7 @@ CBDT, COLRv0, sbix, and OT-SVG formrts are provided to ensure compatibility acro
 ### TwemojiTTTM*-\*.ttf
 
 - A version compatible with terminal emulators.
-- The glyph width for characters in text styles other than Fullwidth and Wide is halved.
+- Glyph widths of characters in text styles other than Fullwidth and Wide are halved.
 
 <img alt="TTTM" src="./images/TTTM.png" width="138">  
 <img alt="TTTMKC" src="./images/TTTMKC.png" width="138">

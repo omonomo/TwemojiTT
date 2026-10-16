@@ -22,7 +22,7 @@ CBDT, COLRv0, sbix, and OT-SVG are provided to ensure compatibility across vario
 ### TwemojiTTTM*-\*.ttf
 
 - A version compatible with terminal emulators.
-- The glyph width for characters in text styles other than Fullwidth and Wide is halved.
+- Glyph widths of characters in text styles other than Fullwidth and Wide are halved.
 
 ## License
 
